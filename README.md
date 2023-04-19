@@ -1,1 +1,1 @@
-# project-DDPG
+# Control in a continuous action space with DDPG
