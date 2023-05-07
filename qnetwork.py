@@ -27,12 +27,13 @@ class ReplayBuffer:
         return states, actions, rewards, next_states, truncs
     
 class QNetwork(nn.Module):
-    def __init__(self):
+    def __init__(self, agent, norm_env):
         super(QNetwork, self).__init__()
+        self.agent = agent
+        self.norm_env = norm_env
         self.fc1 = nn.Linear(4, 32)
         self.fc2 = nn.Linear(32, 32)
         self.fc3 = nn.Linear(32, 1)
-
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -41,24 +42,24 @@ class QNetwork(nn.Module):
         x = self.fc3(x)
         return x
     
-    def update(self, optimizer, transitions, gamma):
-        states, actions, rewards, next_states, truncs = transitions
-        states = torch.FloatTensor(states)
-        actions = torch.FloatTensor(actions)
-        rewards = torch.FloatTensor(rewards)
-        next_states = torch.FloatTensor(next_states)
-        truncs = torch.FloatTensor(truncs)
-
+    def update(self, transition, gamma = 0.001):
+        state = transition[:, :3]
+        action = transition[:, 3]
         # Compute the TD target
         with torch.no_grad():
-            next_actions = policy.select_action(next_states)
-            q_next = self.forward(torch.cat([next_states, next_actions], dim=1))
-            target = rewards + gamma * q_next * (1 - truncs)
-
-        # Compute the TD error and update the Q network
-        q_values = self.forward(torch.cat([states, actions], dim=1))
-        loss = F.mse_loss(q_values, target)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        return loss.item()
+            targets = []
+            for s, a in zip(state, action):
+                next_state, reward, terminated, truncated, info = self.norm_env.step(a.numpy()) 
+                next_actions = self.agent.compute_action(next_state)
+                
+                next_state, next_actions  = torch.Tensor(next_state).view(1, -1), torch.Tensor(next_actions).view(1, -1)
+                q_next = self.forward(torch.cat([next_state, next_actions], dim=1))
+                target = reward + gamma * q_next * (1 - truncated)
+                targets.append(target[0])  
+            targets = torch.Tensor(targets)
+            
+        q_values = self.forward(transition)
+        
+        loss = F.mse_loss(q_values.view(-1), targets)
+        return loss
+    
