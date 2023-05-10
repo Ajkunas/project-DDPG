@@ -2,4 +2,5 @@
 * Reward does not go down 
 * compute the batch of next actions : for loop 
 * is it okay to use the trunc for the last iteration 
-* still train it with fixed torque 
+* still train it with fixed torque  
+* How to use optimizer : optimizer only per episode 

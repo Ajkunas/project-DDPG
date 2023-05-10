@@ -1,15 +1,15 @@
 import numpy as np
 from helpers import NormalizedEnv, RandomAgent
 from qnetwork2 import ReplayBuffer
+from noise import OUActionNoise
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch
-from noise import GaussianActionNoise
 
 # Actor network implementation
 class PolicyNetwork(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, learning_rate):
+    def __init__(self, input_size, hidden_size, output_size):
         super(PolicyNetwork, self).__init__() # refers to fact that it is a subclass of nn.Module and is inheriting all methods
         
         self.layer1 = nn.Linear(3, 32) # accepts the vector states as input (size 3)
@@ -46,36 +46,52 @@ class QNetwork(nn.Module):
         x = self.fc3(x)
         
         return x
-       
+
+    
 # Implementation of a minimal ddpg agent
 class DDPGAgent:
-    def __init__(self, env, actor_learning_rate, critic_learning_rate, gamma, buffer_size, sigma, hidden_size=256):
+    def __init__(self, env, actor_learning_rate, critic_learning_rate, gamma, buffer_size, sigma, theta, tau, hidden_size=256):
         
         self.state_size = env.observation_space.shape[0]
         self.action_size = env.action_space.shape[0]
         
         self.gamma = gamma
+        self.tau = tau
         
         #set up actor critic
-        self.actor = PolicyNetwork(self.state_size, hidden_size, self.action_size, actor_learning_rate)
+        self.actor = PolicyNetwork(self.state_size, hidden_size, self.action_size)
         self.critic = QNetwork(self.state_size + self.action_size, hidden_size, self.action_size)
         
+        # buffer
         self.buffer = ReplayBuffer(buffer_size)
         
-        self.noise = GaussianActionNoise(sigma)
+        # gaussian noise
+        self.noise = OUActionNoise(sigma, theta)
         
+        # critic criterion
         self.critic_criterion  = nn.MSELoss()
         
-        # define optimizers
+        # initialize optimizers
         self.actor_optimizer  = optim.Adam(self.actor.parameters(), lr=actor_learning_rate)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=critic_learning_rate)
+        
+        # the target networks 
+        self.actor_target = PolicyNetwork(self.state_size, hidden_size, self.action_size, actor_learning_rate)
+        self.critic_target = QNetwork(self.state_size + self.action_size, hidden_size, self.action_size)
+        
+        # initiliaze target networks as copies of original networks
+        for target_param, param in zip(actor_target.parameters(), actor.parameters()):
+            target_param.data.copy_(param.data)
+            
+        for target_param, param in zip(critic_target.parameters(), critic.parameters()):
+            target_param.data.copy_(param.data)
         
     def compute_action(self, state, deterministic=True): # deterministic regulates whether to add a random noise to the action or not
         
         if  (type(state) is np.ndarray):
             state = torch.from_numpy(state).float()
             
-        action = self.actor.forward(state)
+        action = self.actor_target.forward(state)
         action = action.detach().numpy()
         
         if (deterministic):
@@ -95,11 +111,15 @@ class DDPGAgent:
         
         # actor loss 
         next_action = self.compute_action(next_state)
-        q_next = self.critic.forward(next_state, next_action)
+        
+        q_next = self.critic_target.forward(next_state, next_action)
+        
         qprime = reward + self.gamma * q_next 
+        
         critic_loss = self.critic_criterion(q_val, qprime)
         
-        actionprime = self.compute_action(state) #not sure though 
+        actionprime = self.actor.forward(state) # not sure though
+        
         policy_loss = -self.critic.forward(state, actionprime).mean() # average output of the Q network
         
         # update the networks 
@@ -111,4 +131,16 @@ class DDPGAgent:
         critic_loss.backward() 
         self.critic_optimizer.step()
         
+        # updates the target network 
+        self.update_target_params()
+        
         return policy_loss, critic_loss
+    
+    def update_target_params(): 
+        # soft update of target networks 
+        for target_param, param in zip(self.actor_target.parameters(), self.actor.parameters()):
+            target_param.data.copy_(self.tau * param.data + (1.0 - self.tau) * target_param.data)
+            
+        for target_param, param in zip(self.critic_target.parameters(), self.critic.parameters()):
+            target_param.data.copy_(self.tau * param.data + (1.0 - self.tau) * target_param.data)
+        

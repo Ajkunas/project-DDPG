@@ -53,15 +53,13 @@ class QNetwork(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, states, action):
-        #print("states :", states)
-        #print("action :", action)
         x = torch.cat([states, action], 1)
         x = self.relu(self.fc1(x))
         x = self.relu(self.fc2(x))
         x = self.fc3(x)
         return x
     
-    def update(self, optimizer, transition, trunc, gamma):
+    def update(self, transition, trunc, gamma):
         
         # Compute the TD target
         with torch.no_grad():
@@ -73,33 +71,19 @@ class QNetwork(nn.Module):
             next_states = torch.FloatTensor(next_states)
             next_actions = []
 
-            #print("states :", states)
-            #print("actions :", actions)
-            #print("rewars :", rewards)
-            #print("next_states :", next_states)
-
+            # not sure about this 
             for next_state in next_states: 
                 next_action = self.agent.compute_action(next_state)
                 next_actions.append(next_action.tolist())
                 
-                #print("next_actions: ", next_actions)
             
             next_actions = torch.FloatTensor(next_actions)
 
             q_values = self.forward(states, actions)
-            #print("q_values :", q_values)
             q_next = self.forward(next_states, next_actions)
-            #print("q_next :", q_next)
-            #print("trunc :", trunc)
             targets = rewards + gamma * q_next * (1 - trunc)
-            #print("target :", targets)
 
             targets = torch.FloatTensor(targets)
-
             loss = self.critic_criterion(q_values, targets)
-            #print("loss :", loss)
-
-            optimizer.zero_grad()
-            #loss.backward() 
-            optimizer.step()
+            
         return loss
