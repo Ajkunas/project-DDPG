@@ -7,7 +7,7 @@ from networks import *
 from buffer import *
 
 class DDPGAgent:
-    def __init__(self, device, env, learning_rate, learning_rate, buffer_size, gamma):
+    def __init__(self, device, env, learning_rate, buffer_size, gamma, tau):
         
         self.device = device
         
@@ -16,10 +16,14 @@ class DDPGAgent:
         self.hidden_size = 32
         
         self.gamma = gamma
+        self.tau = tau
         
         #initialize the networks
         self.actor = PolicyNetwork(self.state_size, self.hidden_size, self.action_size).to(self.device)
+        self.actor_target = PolicyNetwork(self.state_size, self.hidden_size, self.action_size).to(self.device)
+        
         self.critic = QNetwork(self.state_size + self.action_size, self.hidden_size, self.action_size).to(self.device)
+        self.critic_target = QNetwork(self.state_size + self.action_size, self.hidden_size, self.action_size).to(self.device)
         
         self.buffer = ReplayBuffer(buffer_size)
         
@@ -28,6 +32,10 @@ class DDPGAgent:
         # define optimizers
         self.actor_optimizer  = optim.Adam(self.actor.parameters(), lr=learning_rate)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=learning_rate)
+        
+        #initialize the targets 
+        hard_update(self.actor_target, self.actor)
+        hard_update(self.critic_target, self.critic)
         
     def compute_action(self, state, noise, deterministic=True): # deterministic regulates whether to add a random noise to the action or not
 
@@ -54,22 +62,35 @@ class DDPGAgent:
         done_batch = done_batch.unsqueeze(1)
         
         with torch.no_grad():
-            next_action_batch = self.actor.forward(next_state_batch)
+            next_action_batch = self.actor_target.forward(next_state_batch)
             q_next = self.critic.forward(next_state_batch, next_action_batch)
             targets = reward_batch + (1.0 - done_batch) * self.gamma * q_next
         
-        # actor loss
+        # update critic
         self.critic_optimizer.zero_grad()
         q_val = self.critic.forward(state_batch, action_batch)
         critic_loss = self.critic_criterion(q_val, targets)
         critic_loss.backward() 
         self.critic_optimizer.step()
         
-         # update the networks
+         # update actor
         self.actor_optimizer.zero_grad()
         policy_loss = -self.critic.forward(state_batch, self.actor.forward(state_batch)).mean()
         policy_loss.backward()
         self.actor_optimizer.step()
-
+        
+        # Update the target networks
+        update_target_params(self.actor_target, self.actor, self.tau)
+        update_target_params(self.critic_target, self.critic, self.tau)
 
         return policy_loss.item(), critic_loss.item()
+        
+
+def update_target_params(target, source, tau):
+    for target_param, param in zip(target.parameters(), source.parameters()):
+        target_param.data.copy_(param.data * tau + target_param.data * (1.0 - tau))
+
+
+def hard_update(target, source):
+    for target_param, param in zip(target.parameters(), source.parameters()):
+        target_param.data.copy_(param.data)
