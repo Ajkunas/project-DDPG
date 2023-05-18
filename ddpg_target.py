@@ -63,7 +63,7 @@ class DDPGAgent:
         
         with torch.no_grad():
             next_action_batch = self.actor_target.forward(next_state_batch)
-            q_next = self.critic.forward(next_state_batch, next_action_batch)
+            q_next = self.critic_target.forward(next_state_batch, next_action_batch)
             targets = reward_batch + (1.0 - done_batch) * self.gamma * q_next
         
         # update critic
