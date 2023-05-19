@@ -12,13 +12,14 @@ class GaussianActionNoise:
 
 
 class OUActionNoise: 
-    def __init__(self, action_space, sigma, theta):
+    def __init__(self, device, action_space, sigma, theta):
+        self.device = device
         self.sigma = sigma
         self.theta = theta
         self.action_dim = action_space.shape[0]
         
     def reset(self): 
-        self.state = torch.zeros(self.action_dim)
+        self.state = torch.zeros(self.action_dim).to(self.device)
     
     def evolve_state(self, action): 
         x = self.state
