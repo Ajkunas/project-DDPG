@@ -8,12 +8,13 @@ class GaussianActionNoise:
     def get_noisy_action(self, action):
         noisy_action = action + self.sigma*torch.randn_like(action)
         noisy_action = torch.clamp(noisy_action, -1, 1)
-        return noisy_action # or max(-1, min(noisy_action, 1)), action need to be between -1 and 1
+        return noisy_action
 
 
 class OUActionNoise: 
     def __init__(self, device, action_space, sigma, theta):
         self.device = device
+        
         self.sigma = sigma
         self.theta = theta
         self.action_dim = action_space.shape[0]
