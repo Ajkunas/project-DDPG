@@ -40,16 +40,15 @@ def update(batch, critic, criterion, agent, optimizer, gamma):
     reward_batch = reward_batch.unsqueeze(1)
     done_batch = done_batch.unsqueeze(1)
 
-    q_val = critic.forward(state_batch, action_batch)
     q_next = critic.forward(next_state_batch, next_action_batch)
 
     with torch.no_grad():
         targets = reward_batch + (1.0 - done_batch) * gamma * q_next
-    
-    critic_loss = criterion(q_val, targets)
 
     # critic update
     optimizer.zero_grad()
+    q_val = critic.forward(state_batch, action_batch)
+    critic_loss = criterion(q_val, targets)
     critic_loss.backward() 
     optimizer.step()
 
