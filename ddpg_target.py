@@ -33,9 +33,12 @@ class DDPGAgent:
         self.actor_optimizer  = optim.Adam(self.actor.parameters(), lr=learning_rate)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=learning_rate)
         
-        #initialize the targets 
-        hard_update(self.actor_target, self.actor)
-        hard_update(self.critic_target, self.critic)
+        #initialize the targets
+        for target_param, param in zip(self.actor_target.parameters(), self.actor.parameters()):
+            target_param.data.copy_(param.data)
+            
+        for target_param, param in zip(self.critic_target.parameters(), self.critic.parameters()):
+            target_param.data.copy_(param.data)
         
     def compute_action(self, state, noise, deterministic=True): # deterministic regulates whether to add a random noise to the action or not
 
@@ -55,16 +58,17 @@ class DDPGAgent:
         state_batch = torch.cat(batch.state).to(self.device)
         action_batch = torch.cat(batch.action).to(self.device)
         reward_batch = torch.cat(batch.reward).to(self.device)
-        done_batch = torch.cat(batch.done).to(self.device)
+        trunc_batch = torch.cat(batch.trunc).to(self.device)
         next_state_batch = torch.cat(batch.next_state).to(self.device)
         
         reward_batch = reward_batch.unsqueeze(1)
-        done_batch = done_batch.unsqueeze(1)
+        trunc_batch = trunc_batch.unsqueeze(1)
         
         with torch.no_grad():
             next_action_batch = self.actor_target.forward(next_state_batch)
             q_next = self.critic_target.forward(next_state_batch, next_action_batch)
-            targets = reward_batch + (1.0 - done_batch) * self.gamma * q_next
+            targets = reward_batch + (1.0 - trunc_batch) * self.gamma * q_next
+            
         
         # update critic
         self.critic_optimizer.zero_grad()
@@ -89,8 +93,4 @@ class DDPGAgent:
 def update_target_params(target, source, tau):
     for target_param, param in zip(target.parameters(), source.parameters()):
         target_param.data.copy_(param.data * tau + target_param.data * (1.0 - tau))
-
-
-def hard_update(target, source):
-    for target_param, param in zip(target.parameters(), source.parameters()):
-        target_param.data.copy_(param.data)
+        

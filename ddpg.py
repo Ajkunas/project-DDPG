@@ -7,7 +7,7 @@ from networks import *
 from buffer import *
 
 class DDPGAgent:
-    def __init__(self, device, env, learning_rate, learning_rate, buffer_size, gamma):
+    def __init__(self, device, env, learning_rate, buffer_size, gamma):
         
         self.device = device
         
@@ -47,16 +47,16 @@ class DDPGAgent:
         state_batch = torch.cat(batch.state).to(self.device)
         action_batch = torch.cat(batch.action).to(self.device)
         reward_batch = torch.cat(batch.reward).to(self.device)
-        done_batch = torch.cat(batch.done).to(self.device)
+        trunc_batch = torch.cat(batch.trunc).to(self.device)
         next_state_batch = torch.cat(batch.next_state).to(self.device)
         
         reward_batch = reward_batch.unsqueeze(1)
-        done_batch = done_batch.unsqueeze(1)
+        trunc_batch = trunc_batch.unsqueeze(1)
         
         with torch.no_grad():
             next_action_batch = self.actor.forward(next_state_batch)
             q_next = self.critic.forward(next_state_batch, next_action_batch)
-            targets = reward_batch + (1.0 - done_batch) * self.gamma * q_next
+            targets = reward_batch + (1.0 - trunc_batch) * self.gamma * q_next
         
         # actor loss
         self.critic_optimizer.zero_grad()
@@ -70,6 +70,5 @@ class DDPGAgent:
         policy_loss = -self.critic.forward(state_batch, self.actor.forward(state_batch)).mean()
         policy_loss.backward()
         self.actor_optimizer.step()
-
 
         return policy_loss.item(), critic_loss.item()

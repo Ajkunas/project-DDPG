@@ -22,7 +22,7 @@ def update(batch, critic, criterion, agent, optimizer, gamma):
     # Get tensors from the batch
     state_batch = torch.FloatTensor(batch.state)
     action_batch = torch.FloatTensor(batch.action)
-    done_batch = torch.FloatTensor(batch.done)
+    trunc_batch = torch.FloatTensor(batch.trunc)
     reward_batch = torch.FloatTensor(batch.reward)
 
     next_state_batch = batch.next_state
@@ -38,12 +38,12 @@ def update(batch, critic, criterion, agent, optimizer, gamma):
     next_action_batch = torch.FloatTensor(next_action_batch)
     
     reward_batch = reward_batch.unsqueeze(1)
-    done_batch = done_batch.unsqueeze(1)
+    trunc_batch = trunc_batch.unsqueeze(1)
 
     q_next = critic.forward(next_state_batch, next_action_batch)
 
     with torch.no_grad():
-        targets = reward_batch + (1.0 - done_batch) * gamma * q_next
+        targets = reward_batch + (1.0 - trunc_batch) * gamma * q_next
 
     # critic update
     optimizer.zero_grad()
